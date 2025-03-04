@@ -3,6 +3,19 @@ from tkinter import simpledialog, messagebox, filedialog
 from datetime import datetime
 import json
 import os
+import sys
+from pathlib import Path
+
+def get_data_file():
+    # Check if the app is bundled (frozen)
+    if getattr(sys, 'frozen', False):
+        # Create a hidden folder in the user's home directory for app data
+        data_dir = Path.home() / ".billable_tracker"
+        data_dir.mkdir(exist_ok=True)
+        return str(data_dir / "billable_tracker_data.json")
+    else:
+        # During development, use the current directory
+        return "billable_tracker_data.json"
 
 class TimeTrackerApp:
     def __init__(self, root):
@@ -14,8 +27,8 @@ class TimeTrackerApp:
         self.start_time = None
         self.after_id = None
 
-        # File to persist data
-        self.data_file = "billable_tracker_data.json"
+        # Use the writable location for the data file
+        self.data_file = get_data_file()
         # Dictionary to store sessions for each client:
         # { client_name: [ [start_time_str, end_time_str, duration_str], ... ] }
         self.sessions = {}
