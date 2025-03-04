@@ -7,37 +7,37 @@ import sys
 from pathlib import Path
 
 def get_data_file():
-    # Check if the app is bundled (frozen)
     if getattr(sys, 'frozen', False):
-        # Create a hidden folder in the user's home directory for app data
         data_dir = Path.home() / ".billable_tracker"
         data_dir.mkdir(exist_ok=True)
         return str(data_dir / "billable_tracker_data.json")
     else:
-        # During development, use the current directory
         return "billable_tracker_data.json"
 
 class TimeTrackerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Billable Hours Tracker")
-        
+
         self.current_client = None
         self.timer_running = False
         self.start_time = None
         self.after_id = None
 
-        # Use the writable location for the data file
         self.data_file = get_data_file()
-        # Dictionary to store sessions for each client:
-        # { client_name: [ [start_time_str, end_time_str, duration_str], ... ] }
         self.sessions = {}
-        
+
         self.setup_ui()
         self.load_sessions()
 
     def setup_ui(self):
-        # Left frame: Client list and Add Client button
+        # ----------------------
+        # Set your color scheme
+        # ----------------------
+        bg_color = "#2B2B2B"   # Dark background for frames and window
+        fg_color = "white"     # Light foreground for labels, listbox, etc.
+
+        # Left frame: Client list and buttons
         self.left_frame = tk.Frame(self.root)
         self.left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
 
@@ -47,6 +47,9 @@ class TimeTrackerApp:
 
         self.add_client_button = tk.Button(self.left_frame, text="Add Client", command=self.add_client)
         self.add_client_button.pack(pady=5)
+
+        self.remove_client_button = tk.Button(self.left_frame, text="Remove Client", command=self.remove_client)
+        self.remove_client_button.pack(pady=5)
 
         # Right frame: Timer display, Start/Stop button, and History display
         self.right_frame = tk.Frame(self.root)
@@ -70,13 +73,58 @@ class TimeTrackerApp:
         self.save_button = tk.Button(self.right_frame, text="Save History to File", command=self.save_history_manual)
         self.save_button.pack(pady=5)
 
+        # ----------------------
+        # Apply the color scheme
+        # ----------------------
+        # Main window background
+        self.root.configure(bg=bg_color)
+
+        # Frames
+        self.left_frame.configure(bg=bg_color)
+        self.right_frame.configure(bg=bg_color)
+
+        # Listbox
+        self.client_listbox.configure(
+            bg=bg_color, fg=fg_color, 
+            selectbackground="#555555", selectforeground="white"
+        )
+
+        # Labels
+        self.client_label.configure(bg=bg_color, fg=fg_color)
+        self.timer_label.configure(bg=bg_color, fg=fg_color)
+        self.history_label.configure(bg=bg_color, fg=fg_color)
+
+        # Text widget
+        self.history_text.configure(bg=bg_color, fg=fg_color, insertbackground=fg_color)
+
+        # Buttons (white background, black text)
+        button_bg = "white"
+        button_fg = "black"
+        active_bg = "#DDDDDD"
+        active_fg = "black"
+
+        self.add_client_button.configure(
+            bg=button_bg, fg=button_fg,
+            activebackground=active_bg, activeforeground=active_fg
+        )
+        self.remove_client_button.configure(
+            bg=button_bg, fg=button_fg,
+            activebackground=active_bg, activeforeground=active_fg
+        )
+        self.start_stop_button.configure(
+            bg=button_bg, fg=button_fg,
+            activebackground=active_bg, activeforeground=active_fg
+        )
+        self.save_button.configure(
+            bg=button_bg, fg=button_fg,
+            activebackground=active_bg, activeforeground=active_fg
+        )
+
     def load_sessions(self):
-        """Load sessions from the data file."""
         if os.path.exists(self.data_file):
             try:
                 with open(self.data_file, "r") as f:
                     self.sessions = json.load(f)
-                # Populate the listbox with client names
                 for client in self.sessions.keys():
                     self.client_listbox.insert(tk.END, client)
             except Exception as e:
@@ -86,7 +134,6 @@ class TimeTrackerApp:
             self.sessions = {}
 
     def save_sessions(self):
-        """Save sessions to the data file."""
         try:
             with open(self.data_file, "w") as f:
                 json.dump(self.sessions, f)
@@ -102,6 +149,24 @@ class TimeTrackerApp:
                 self.sessions[client_name] = []
                 self.client_listbox.insert(tk.END, client_name)
                 self.save_sessions()
+
+    def remove_client(self):
+        selection = self.client_listbox.curselection()
+        if not selection:
+            messagebox.showerror("Error", "Please select a client to remove.")
+            return
+
+        client_to_remove = self.client_listbox.get(selection[0])
+        answer = messagebox.askyesno("Confirm Removal", f"Are you sure you want to remove '{client_to_remove}'?")
+        if answer:
+            if client_to_remove in self.sessions:
+                del self.sessions[client_to_remove]
+            self.client_listbox.delete(selection[0])
+            if self.current_client == client_to_remove:
+                self.current_client = None
+                self.client_label.config(text="No client selected")
+                self.history_text.delete("1.0", tk.END)
+            self.save_sessions()
 
     def on_client_select(self, event):
         selection = self.client_listbox.curselection()
