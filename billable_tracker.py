@@ -1,0 +1,180 @@
+import tkinter as tk
+from tkinter import simpledialog, messagebox, filedialog
+from datetime import datetime
+import json
+import os
+
+class TimeTrackerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Billable Hours Tracker")
+        
+        self.current_client = None
+        self.timer_running = False
+        self.start_time = None
+        self.after_id = None
+
+        # File to persist data
+        self.data_file = "billable_tracker_data.json"
+        # Dictionary to store sessions for each client:
+        # { client_name: [ [start_time_str, end_time_str, duration_str], ... ] }
+        self.sessions = {}
+        
+        self.setup_ui()
+        self.load_sessions()
+
+    def setup_ui(self):
+        # Left frame: Client list and Add Client button
+        self.left_frame = tk.Frame(self.root)
+        self.left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
+
+        self.client_listbox = tk.Listbox(self.left_frame, height=15, width=20)
+        self.client_listbox.pack()
+        self.client_listbox.bind("<<ListboxSelect>>", self.on_client_select)
+
+        self.add_client_button = tk.Button(self.left_frame, text="Add Client", command=self.add_client)
+        self.add_client_button.pack(pady=5)
+
+        # Right frame: Timer display, Start/Stop button, and History display
+        self.right_frame = tk.Frame(self.root)
+        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        self.client_label = tk.Label(self.right_frame, text="No client selected", font=("Helvetica", 14))
+        self.client_label.pack(pady=(0, 10))
+
+        self.timer_label = tk.Label(self.right_frame, text="00:00:00", font=("Helvetica", 24))
+        self.timer_label.pack(pady=10)
+
+        self.start_stop_button = tk.Button(self.right_frame, text="Start", width=10, command=self.toggle_timer)
+        self.start_stop_button.pack(pady=5)
+
+        self.history_label = tk.Label(self.right_frame, text="Session History:", font=("Helvetica", 12))
+        self.history_label.pack(pady=(20, 0))
+
+        self.history_text = tk.Text(self.right_frame, height=10, width=50)
+        self.history_text.pack(pady=(5, 0))
+
+        self.save_button = tk.Button(self.right_frame, text="Save History to File", command=self.save_history_manual)
+        self.save_button.pack(pady=5)
+
+    def load_sessions(self):
+        """Load sessions from the data file."""
+        if os.path.exists(self.data_file):
+            try:
+                with open(self.data_file, "r") as f:
+                    self.sessions = json.load(f)
+                # Populate the listbox with client names
+                for client in self.sessions.keys():
+                    self.client_listbox.insert(tk.END, client)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load session data: {e}")
+                self.sessions = {}
+        else:
+            self.sessions = {}
+
+    def save_sessions(self):
+        """Save sessions to the data file."""
+        try:
+            with open(self.data_file, "w") as f:
+                json.dump(self.sessions, f)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save session data: {e}")
+
+    def add_client(self):
+        client_name = simpledialog.askstring("Add Client", "Enter client name:")
+        if client_name:
+            if client_name in self.sessions:
+                messagebox.showerror("Error", "Client already exists!")
+            else:
+                self.sessions[client_name] = []
+                self.client_listbox.insert(tk.END, client_name)
+                self.save_sessions()
+
+    def on_client_select(self, event):
+        selection = self.client_listbox.curselection()
+        if selection:
+            selected_client = self.client_listbox.get(selection[0])
+            if self.timer_running:
+                answer = messagebox.askyesno("Switch Client", "A timer is running. Stop current timer and switch to selected client?")
+                if answer:
+                    self.stop_timer()
+                else:
+                    if self.current_client:
+                        idx = list(self.client_listbox.get(0, tk.END)).index(self.current_client)
+                        self.client_listbox.selection_clear(0, tk.END)
+                        self.client_listbox.selection_set(idx)
+                    return
+            self.current_client = selected_client
+            self.client_label.config(text=f"Current Client: {self.current_client}")
+            self.update_history_text()
+
+    def toggle_timer(self):
+        if self.current_client is None:
+            messagebox.showerror("Error", "Please select a client first.")
+            return
+
+        if not self.timer_running:
+            self.start_timer()
+            self.start_stop_button.config(text="Stop")
+        else:
+            self.stop_timer()
+            self.start_stop_button.config(text="Start")
+
+    def start_timer(self):
+        self.start_time = datetime.now()
+        self.timer_running = True
+        self.update_timer()
+
+    def update_timer(self):
+        if self.timer_running:
+            now = datetime.now()
+            elapsed = now - self.start_time
+            self.timer_label.config(text=str(elapsed).split(".")[0])
+            self.after_id = self.root.after(1000, self.update_timer)
+
+    def stop_timer(self):
+        if self.timer_running:
+            self.timer_running = False
+            if self.after_id:
+                self.root.after_cancel(self.after_id)
+            end_time = datetime.now()
+            duration = end_time - self.start_time
+            session_record = [
+                self.start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                end_time.strftime("%Y-%m-%d %H:%M:%S"),
+                str(duration).split(".")[0]
+            ]
+            if self.current_client:
+                self.sessions[self.current_client].append(session_record)
+                self.save_sessions()
+            self.timer_label.config(text="00:00:00")
+            self.start_time = None
+            self.update_history_text()
+
+    def update_history_text(self):
+        self.history_text.delete("1.0", tk.END)
+        if self.current_client and self.sessions.get(self.current_client):
+            history = self.sessions[self.current_client]
+            for idx, record in enumerate(history, 1):
+                self.history_text.insert(tk.END, f"{idx}. Start: {record[0]}, End: {record[1]}, Duration: {record[2]}\n")
+
+    def save_history_manual(self):
+        if self.current_client:
+            file_path = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text Files", "*.txt")])
+            if file_path:
+                try:
+                    with open(file_path, "w") as f:
+                        f.write(f"Session History for {self.current_client}\n")
+                        history = self.sessions[self.current_client]
+                        for idx, record in enumerate(history, 1):
+                            f.write(f"{idx}. Start: {record[0]}, End: {record[1]}, Duration: {record[2]}\n")
+                    messagebox.showinfo("Saved", f"History saved to {file_path}")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to save history: {e}")
+        else:
+            messagebox.showerror("Error", "No client selected.")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = TimeTrackerApp(root)
+    root.mainloop()
