@@ -4,8 +4,8 @@ from datetime import datetime
 import json
 import os
 import sys
-import csv
 from pathlib import Path
+import csv
 
 def get_data_file():
     if getattr(sys, 'frozen', False):
@@ -19,6 +19,7 @@ class TimeTrackerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Billable Hours Tracker")
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.current_client = None
         self.timer_running = False
@@ -32,15 +33,9 @@ class TimeTrackerApp:
         self.load_sessions()
 
     def setup_ui(self):
-        # Color Scheme
         bg_color = "#2B2B2B"
         fg_color = "white"
-        button_bg = "white"
-        button_fg = "black"
-        active_bg = "#DDDDDD"
-        active_fg = "black"
 
-        # Left Frame
         self.left_frame = tk.Frame(self.root)
         self.left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
 
@@ -54,7 +49,9 @@ class TimeTrackerApp:
         self.remove_client_button = tk.Button(self.left_frame, text="Remove Client", command=self.remove_client)
         self.remove_client_button.pack(pady=5)
 
-        # Right Frame
+        self.reset_history_button = tk.Button(self.left_frame, text="Reset History", command=self.reset_history)
+        self.reset_history_button.pack(pady=5)
+
         self.right_frame = tk.Frame(self.root)
         self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -76,10 +73,9 @@ class TimeTrackerApp:
         self.save_button = tk.Button(self.right_frame, text="Save History to File", command=self.save_history_manual)
         self.save_button.pack(pady=5)
 
-        self.export_csv_button = tk.Button(self.right_frame, text="Export to CSV", command=self.export_history_to_csv)
-        self.export_csv_button.pack(pady=5)
+        self.export_all_button = tk.Button(self.right_frame, text="Export All Clients to CSV", command=self.export_all_to_csv)
+        self.export_all_button.pack(pady=5)
 
-        # Apply Color Scheme
         self.root.configure(bg=bg_color)
         self.left_frame.configure(bg=bg_color)
         self.right_frame.configure(bg=bg_color)
@@ -89,15 +85,9 @@ class TimeTrackerApp:
         self.history_label.configure(bg=bg_color, fg=fg_color)
         self.history_text.configure(bg=bg_color, fg=fg_color, insertbackground=fg_color)
 
-        # Button Styling
-        for button in [
-            self.add_client_button,
-            self.remove_client_button,
-            self.start_stop_button,
-            self.save_button,
-            self.export_csv_button
-        ]:
-            button.configure(bg=button_bg, fg=button_fg, activebackground=active_bg, activeforeground=active_fg)
+        for btn in [self.add_client_button, self.remove_client_button, self.reset_history_button,
+                    self.start_stop_button, self.save_button, self.export_all_button]:
+            btn.configure(bg="white", fg="black", activebackground="#DDDDDD", activeforeground="black")
 
     def load_sessions(self):
         if os.path.exists(self.data_file):
@@ -146,6 +136,16 @@ class TimeTrackerApp:
                 self.client_label.config(text="No client selected")
                 self.history_text.delete("1.0", tk.END)
             self.save_sessions()
+
+    def reset_history(self):
+        if self.current_client:
+            answer = messagebox.askyesno("Reset History", f"Are you sure you want to reset history for '{self.current_client}'?")
+            if answer:
+                self.sessions[self.current_client] = []
+                self.update_history_text()
+                self.save_sessions()
+        else:
+            messagebox.showerror("Error", "No client selected.")
 
     def on_client_select(self, event):
         selection = self.client_listbox.curselection()
@@ -231,21 +231,25 @@ class TimeTrackerApp:
         else:
             messagebox.showerror("Error", "No client selected.")
 
-    def export_history_to_csv(self):
-        if self.current_client:
-            file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV Files", "*.csv")])
-            if file_path:
-                try:
-                    with open(file_path, mode='w', newline='') as f:
-                        writer = csv.writer(f)
-                        writer.writerow(["Start Time", "End Time", "Duration"])
-                        for record in self.sessions[self.current_client]:
-                            writer.writerow(record)
-                    messagebox.showinfo("Exported", f"CSV exported to {file_path}")
-                except Exception as e:
-                    messagebox.showerror("Error", f"Failed to export CSV: {e}")
+    def export_all_to_csv(self):
+        file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV Files", "*.csv")])
+        if file_path:
+            try:
+                with open(file_path, "w", newline="") as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(["Client", "Start Time", "End Time", "Duration"])
+                    for client, records in self.sessions.items():
+                        for record in records:
+                            writer.writerow([client, *record])
+                messagebox.showinfo("Exported", f"All session data saved to {file_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to export CSV: {e}")
+
+    def on_close(self):
+        if self.timer_running:
+            messagebox.showwarning("Timer Running", "You must stop the timer before closing the application.")
         else:
-            messagebox.showerror("Error", "No client selected.")
+            self.root.destroy()
 
 if __name__ == "__main__":
     root = tk.Tk()
