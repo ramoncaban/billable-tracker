@@ -255,3 +255,5 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = TimeTrackerApp(root)
     root.mainloop()
+
+#Testing for mac
