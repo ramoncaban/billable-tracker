@@ -256,4 +256,3 @@ if __name__ == "__main__":
     app = TimeTrackerApp(root)
     root.mainloop()
 
-#Testing for mac
